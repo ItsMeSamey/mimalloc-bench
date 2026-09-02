@@ -62,6 +62,7 @@ readonly version_scudo=main
 readonly version_sg=master   # ~unmaintained since 2021
 readonly version_sm=master   # ~unmaintained since 2017
 readonly version_sn=0.7.5
+readonly version_s=v7.6.0
 readonly version_tbb=v2023.1.0
 readonly version_tc=gperftools-2.18
 readonly version_tcg=81f4e44f23f2936303f9404fee7315119b9df623 # 2026-02-23
@@ -76,6 +77,7 @@ readonly version_rocksdb=10.10.1
 readonly version_lua=v5.4.7
 readonly version_linux=6.5.1
 readonly version_bazel=8.8.0
+readonly version_rust=1.87.0
 
 # HTTP-downloaded files checksums
 readonly sha256sum_sh6bench="506354d66b9eebef105d757e055bc55e8d4aea1e7b51faab3da35b0466c923a1"
@@ -107,6 +109,7 @@ setup_scudo=0
 setup_sg=0
 setup_sm=0
 setup_sn=0
+setup_s=0
 setup_tbb=0
 setup_tc=0
 setup_tcg=0
@@ -153,6 +156,7 @@ while : ; do
         setup_mi3=$flag_arg
         setup_pa=$flag_arg
         setup_sn=$flag_arg
+        setup_s=$flag_arg
         setup_sg=$flag_arg
         setup_tbb=$flag_arg
         setup_tc=$flag_arg
@@ -249,6 +253,8 @@ while : ; do
         setup_sm=$flag_arg;;
     sn)
         setup_sn=$flag_arg;;
+    s)
+        setup_s=$flag_arg;;
     tbb)
         setup_tbb=$flag_arg;;
     tc)
@@ -295,6 +301,7 @@ while : ; do
         echo "  sg                           setup slimguard ($version_sg)"
         echo "  sm                           setup supermalloc ($version_sm)"
         echo "  sn                           setup snmalloc ($version_sn)"
+        echo "  s                            setup smalloc ($version_s)"
         echo "  tbb                          setup Intel TBB malloc ($version_tbb)"
         echo "  tc                           setup tcmalloc ($version_tc)"
         echo "  tcg                          setup Google's tcmalloc ($version_tcg)"
@@ -459,7 +466,7 @@ if test "$setup_packages" = "1"; then
   if grep -q 'ID=fedora' /etc/os-release 2>/dev/null; then
     # no 'apt update' equivalent needed on Fedora
     dnfinstall "gcc-c++ clang lld llvm-devel unzip dos2unix bc gmp-devel wget gawk \
-      cmake python3 ruby ninja-build libtool autoconf git patch time sed \
+      cmake python3 ruby cargo ninja-build libtool autoconf git patch time sed \
       ghostscript libatomic libstdc++ libstdc++-static which gflags-devel xz readline-devel snappy-devel"
     dnfinstallbazel
   elif grep -q -e 'ID=debian' -e 'ID=ubuntu' /etc/os-release 2>/dev/null; then
@@ -469,19 +476,20 @@ if test "$setup_packages" = "1"; then
       cmake python3 ruby ninja-build libtool autoconf sed ghostscript time \
       curl automake libatomic1 libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev \
       liblz4-dev libzstd-dev libreadline-dev pkg-config gawk util-linux"
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain $version_rust
     aptinstallbazel
   elif grep -q -e 'ID=alpine' /etc/os-release 2>/dev/null; then
     echo "@testing http://nl.alpinelinux.org/alpine/edge/testing" >> /etc/apk/repositories
     apk update
     apkinstall "clang lld unzip dos2unix bc gmp-dev wget cmake python3 automake gawk \
-      samurai libtool git build-base linux-headers autoconf util-linux sed \
+      samurai libtool git cargo build-base linux-headers autoconf util-linux sed \
       ghostscript libatomic gflags-dev readline-dev snappy-dev"
     apkinstall "bazel@testing"
   elif brew --version 2> /dev/null >/dev/null; then
     brewinstall "dos2unix wget cmake ninja automake libtool gnu-time gmp mpir gnu-sed \
-      ghostscript bazelisk gflags snappy"
+      ghostscript bazelisk gflags snappy rust"
   elif grep -q 'Arch Linux' /etc/os-release; then
-    sudo pacman -S dos2unix wget cmake ninja automake libtool time gmp sed ghostscript bazelisk gflags snappy
+    sudo pacman -S dos2unix wget cmake ninja automake libtool time gmp sed ghostscript bazelisk gflags snappy rust
   fi
 fi
 
@@ -707,6 +715,16 @@ if test "$setup_sn" = "1"; then
   fi
   cd release
   ninja libsnmallocshim$extso libsnmallocshim-checks$extso
+  popd
+fi
+
+if test "$setup_s" = "1"; then
+  checkout s $version_s https://github.com/zooko/smalloc
+  cargo_cmd=cargo
+  if test -x "$HOME/.cargo/bin/cargo"; then
+    cargo_cmd="$HOME/.cargo/bin/cargo"
+  fi
+  "$cargo_cmd" build --release --package smalloc-ffi
   popd
 fi
 
