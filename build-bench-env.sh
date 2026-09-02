@@ -71,9 +71,11 @@ readonly version_rmalloc=master
 # benchmark versions
 readonly version_redis=6.2.7
 readonly version_lean=21d264a66d53b0a910178ae7d9529cb5886a39b6 # build fix for recent compilers
+readonly version_mathlib=release_812
 readonly version_rocksdb=10.10.1
 readonly version_lua=v5.4.7
 readonly version_linux=6.5.1
+readonly version_bazel=8.8.0
 
 # HTTP-downloaded files checksums
 readonly sha256sum_sh6bench="506354d66b9eebef105d757e055bc55e8d4aea1e7b51faab3da35b0466c923a1"
@@ -426,20 +428,19 @@ function aptinstallbazel {
   echo "> installing bazel"
   echo ""
   aptinstall apt-transport-https curl gnupg
-  curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel.gpg
-  $SUDO mv bazel.gpg /etc/apt/trusted.gpg.d/bazel.gpg
-  echo "deb [arch=amd64] https://storage.googleapis.com/bazel-apt stable jdk1.8" | $SUDO tee /etc/apt/sources.list.d/bazel.list
+  curl -fsSL https://releases.bazel.build/bazel-release.pub.gpg | gpg --dearmor > bazel-archive-keyring.gpg
+  $SUDO mv bazel-archive-keyring.gpg /usr/share/keyrings
+  echo "deb [arch=amd64 signed-by=/usr/share/keyrings/bazel-archive-keyring.gpg] https://storage.googleapis.com/bazel-apt stable jdk1.8" | $SUDO tee /etc/apt/sources.list.d/bazel.list
   $SUDO apt update -qq
-  aptinstall bazel
+  aptinstall bazel-$version_bazel
+  $SUDO ln -sf /usr/bin/bazel-$version_bazel /usr/bin/bazel
 }
 
 function dnfinstallbazel {
   echo ""
-  echo "> installing bazel"
+  echo "> installing bazelisk"
   echo ""
-  dnfinstall dnf-plugins-core
-  $SUDO dnf copr -y enable vbatts/bazel
-  dnfinstall bazel5
+  dnfinstall bazelisk
 }
 
 if test "$all" = "1"; then
@@ -459,9 +460,8 @@ if test "$setup_packages" = "1"; then
     # no 'apt update' equivalent needed on Fedora
     dnfinstall "gcc-c++ clang lld llvm-devel unzip dos2unix bc gmp-devel wget gawk \
       cmake python3 ruby ninja-build libtool autoconf git patch time sed \
-      ghostscript libatomic libstdc++ which gflags-devel xz readline-devel snappy-devel"
-    # bazel5 is broken on the copr: https://github.com/bazelbuild/bazel/issues/19295
-    #dnfinstallbazel
+      ghostscript libatomic libstdc++ libstdc++-static which gflags-devel xz readline-devel snappy-devel"
+    dnfinstallbazel
   elif grep -q -e 'ID=debian' -e 'ID=ubuntu' /etc/os-release 2>/dev/null; then
     echo "updating package database... ($SUDO apt update)"
     $SUDO apt update -qq
@@ -494,8 +494,13 @@ fi
 
 if test "$setup_hm" = "1"; then
   checkout hm $version_hm https://github.com/GrapheneOS/hardened_malloc
-  make CONFIG_NATIVE=true CONFIG_WERROR=false VARIANT=light -j $proc
-  make CONFIG_NATIVE=true CONFIG_WERROR=false VARIANT=default -j $proc
+  if grep -q 'std::__throw_bad_alloc' new.cc; then
+    sed -i '/^#include <bits\/functexcept.h>$/d' new.cc
+    sed -i 's/std::__throw_bad_alloc();/throw std::bad_alloc();/g' new.cc
+    ! grep -q 'std::__throw_bad_alloc' new.cc
+  fi
+  make CONFIG_NATIVE=true CONFIG_WERROR=false VARIANT=light -j $procs
+  make CONFIG_NATIVE=true CONFIG_WERROR=false VARIANT=default -j $procs
   popd
 fi
 
@@ -633,7 +638,11 @@ fi
 
 if test "$setup_tcg" = "1"; then
   checkout tcg $version_tcg https://github.com/google/tcmalloc
-  bazel build -c opt tcmalloc
+  if command -v bazelisk > /dev/null; then
+    USE_BAZEL_VERSION=$version_bazel bazelisk build -c opt tcmalloc
+  else
+    bazel build -c opt tcmalloc
+  fi
   popd
 fi
 
@@ -649,6 +658,10 @@ fi
 
 if test "$setup_je" = "1"; then
   checkout je $version_je https://github.com/jemalloc/jemalloc
+  if grep -q 'std::__throw_bad_alloc' src/jemalloc_cpp.cpp; then
+    sed -i 's/std::__throw_bad_alloc();/throw std::bad_alloc();/g' src/jemalloc_cpp.cpp
+    ! grep -q 'std::__throw_bad_alloc' src/jemalloc_cpp.cpp
+  fi
   if test -f config.status; then
     echo "$devdir/jemalloc is already configured; no need to reconfigure"
   else
@@ -842,8 +855,8 @@ if test "$setup_lean" = "1"; then
   echo "make -j$procs"
   make -j $procs
   rm -rf ./tests/  # we don't need tests
-  mkdir -p "$devdir/mathlib"
-  cp -u "$devdir/lean/leanpkg/leanpkg.toml" "$devdir/mathlib"
+  popd
+  checkout mathlib $version_mathlib https://github.com/leanprover-community/mathlib3
   popd
 fi
 
