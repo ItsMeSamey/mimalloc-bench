@@ -76,6 +76,7 @@ void QueryPerformanceFrequency(long * x)
 #include  <time.h>
 #include  <assert.h>
 #include  <atomic>
+#include "../allocator_adapter.h"
 
 #define _REENTRANT 1
 #include <pthread.h>
@@ -149,7 +150,7 @@ void operator delete[](void *pUserData )
 #endif
 
 #ifndef CUSTOM_MALLOC
-#define CUSTOM_MALLOC malloc
+#define CUSTOM_MALLOC bench_alloc
 #define CUSTOM_FREE   free
 #endif
 
@@ -356,6 +357,7 @@ int main (int argc, char *argv[])
  }
 #endif
 
+  bench_thread_done();
   return(0) ;
 
 } /* main */
@@ -405,7 +407,7 @@ void runloops(long sleep_cnt, int num_chunks )
     delete[] blkp[victim] ;
 #endif
 #else
-    CUSTOM_FREE(blkp[victim]) ;
+    bench_free_sized(blkp[victim], blksize[victim]) ;
 #endif
 
       if (max_size == min_size) {
@@ -600,7 +602,7 @@ static void * exercise_heap( void *pinput)
   // shows up when thread startup is slow enough to deliver a just-created worker after
   // stopflag is set (the stuck slot has cThreads==cAllocs==0: it never entered the loop).
   pdea = (thread_data *)pinput ;
-  if( stopflag ){ pdea->finished = TRUE ; return 0; }
+  if( stopflag ){ pdea->finished = TRUE ; bench_thread_done(); return 0; }
 
   pdea->finished = FALSE ;
   pdea->cThreads++ ;
@@ -616,7 +618,7 @@ static void * exercise_heap( void *pinput)
     delete[] pdea->array[victim] ;
 #endif
 #else
-    CUSTOM_FREE(pdea->array[victim]) ;
+    bench_free_sized(pdea->array[victim], pdea->blksize[victim]) ;
 #endif
     pdea->cFrees++ ;
 
@@ -663,6 +665,7 @@ static void * exercise_heap( void *pinput)
   }
 
 	//end_thread();
+	bench_thread_done();
 
 #ifndef _WIN32
   pthread_exit (NULL);
@@ -714,7 +717,7 @@ static void warmup(char **blkp, int num_chunks )
     delete[] blkp[victim] ;
 #endif
 #else
-    CUSTOM_FREE(blkp[victim]) ;
+    bench_free_sized(blkp[victim], blksize[victim]) ;
 #endif
 
     if (max_size == min_size) {

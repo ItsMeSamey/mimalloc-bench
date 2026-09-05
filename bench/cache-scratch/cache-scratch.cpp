@@ -37,6 +37,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <pthread.h>
+#include "../allocator_adapter.h"
 using namespace std;
 
 
@@ -72,11 +73,11 @@ extern "C" void * worker (void * arg)
   //   repeatedly write on it,
   //   then free it.
   workerArg * w = (workerArg *) arg;
-  delete w->_object;
+  bench_free_sized(w->_object, (size_t)w->_objSize);
   workerArg w1 = *w;
   for (int i = 0; i < w1._iterations; i++) {
     // Allocate the object.
-    char * obj = new char[w1._objSize];
+    char * obj = (char*)bench_alloc((size_t)w1._objSize);
     // Write into it a bunch of times.
     for (int j = 0; j < w1._repetitions; j++) {
       for (int k = 0; k < w1._objSize; k++) {
@@ -86,9 +87,10 @@ extern "C" void * worker (void * arg)
       }
     }
     // Free the object.
-    delete [] obj;
+    bench_free_sized(obj, (size_t)w1._objSize);
   }
 
+  bench_thread_done();
 #if !defined(_WIN32)
   return NULL;
 #endif
@@ -123,7 +125,7 @@ int main (int argc, char * argv[])
   // Allocate nthreads objects and distribute them among the threads.
   char ** objs = new char * [nthreads];
   for (i = 0; i < nthreads; i++) {
-    objs[i] = new char[objSize];
+    objs[i] = (char*)bench_alloc((size_t)objSize);
   }
 
   
@@ -138,6 +140,7 @@ int main (int argc, char * argv[])
   free(threads);
   delete [] objs;
   delete [] w;
+  bench_thread_done();
 
   return 0;
 }

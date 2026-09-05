@@ -36,6 +36,7 @@
 #define NEW_DELETE_ALLOCATOR_H
 
 #include "test_common.h"
+#include "../allocator_adapter.h"
 
 
 class NewDeleteAllocatorForTest
@@ -49,9 +50,9 @@ public:
 	static constexpr const char* name() { return "new-delete allocator"; }
 
 	void init() {}
-	void* allocate( size_t sz ) { return new uint8_t[ sz ]; }
-	void deallocate( void* ptr ) { delete [] reinterpret_cast<uint8_t*>(ptr); }
-	void deinit() {}
+	void* allocate( size_t sz ) { return bench_alloc( sz ); }
+	void deallocate( void* ptr, size_t sz ) { bench_free_sized( ptr, sz ); }
+	void deinit() { bench_thread_done(); }
 
 	// next calls are to get additional stats of the allocator, etc, if desired
 	void doWhateverAfterSetupPhase() {}

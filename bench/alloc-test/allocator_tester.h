@@ -364,7 +364,7 @@ void randomPos_RandomSize( AllocatorUnderTest& allocatorUnderTest, size_t iterCo
 #ifdef COLLECT_USER_MAX_ALLOCATED
 				allocatedSz -= baseBuff[idx].sz;
 #endif
-				allocatorUnderTest.deallocate( baseBuff[idx].ptr );
+				allocatorUnderTest.deallocate( baseBuff[idx].ptr, baseBuff[idx].sz );
 				baseBuff[idx].ptr = 0;
 			}
 			else
@@ -428,11 +428,11 @@ void randomPos_RandomSize( AllocatorUnderTest& allocatorUnderTest, size_t iterCo
 						}
 				}
 			}
-			allocatorUnderTest.deallocate( baseBuff[idx].ptr );
+			allocatorUnderTest.deallocate( baseBuff[idx].ptr, baseBuff[idx].sz );
 		}
 
 	//if constexpr ( !allocatorUnderTest.isFake() )
-		allocatorUnderTest.deallocate( baseBuff );
+		allocatorUnderTest.deallocate( baseBuff, maxItems * sizeof(TestBin) );
 	//else
 	//	allocatorUnderTest.deallocateSlots( baseBuff );
 	allocatorUnderTest.deinit();

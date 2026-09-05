@@ -25,11 +25,11 @@
 //#include "xmalloc.h"
 
 #include "random.h"
+#include "../allocator_adapter.h"
 
 #define CACHE_ALIGNED 1
 
-#define xmalloc malloc
-#define xfree free
+#define xmalloc bench_alloc
 
 #define DEFAULT_OBJECT_SIZE 1024
 
@@ -90,6 +90,7 @@ static const int n_sizes = sizeof(possible_sizes)/sizeof(long);
 struct batch {
   struct batch *next_batch;
   void *objects[OBJECTS_PER_BATCH];
+  size_t sizes[OBJECTS_PER_BATCH];
 };
 
 volatile struct batch *batches = NULL;
@@ -135,11 +136,13 @@ void *mem_allocator (void *arg) {
     struct batch *b = xmalloc(sizeof(*b));
     for (int i = 0; i < OBJECTS_PER_BATCH; i++) {
       size_t siz = object_size > 0 ? object_size : possible_sizes[lran2(&lr)%n_sizes];
+      b->sizes[i] = siz;
       b->objects[i] = xmalloc(siz);
       memset(b->objects[i],i%256,(siz > 128 ? 128 : siz));
     }
     enqueue_batch(b);
   }
+  bench_thread_done();
   return NULL;
 }
 
@@ -150,12 +153,13 @@ void *mem_releaser(void *arg) {
     struct batch *b = dequeue_batch();
     if (b) {
       for (int i = 0; i < OBJECTS_PER_BATCH; i++) {
-	      xfree(b->objects[i]);
+	      bench_free_sized(b->objects[i], b->sizes[i]);
       }
-      xfree(b);
+      bench_free_sized(b, sizeof(*b));
     }
     counters[thread_id].c += OBJECTS_PER_BATCH;
   }
+  bench_thread_done();
   return NULL;
 }
 
@@ -223,7 +227,7 @@ int run_memory_free_test()
 	  printf("rtime: %.3f, free/sec: %.3f M\n", rtime, mfree_per_sec);
   }
 	if (verbose_flag) printf("Program done\n");
-  if (ids!=NULL) xfree(ids);
+  if (ids!=NULL) bench_free_sized(ids, sizeof(int) * num_workers);
 	return(0);
 }
 
@@ -275,13 +279,14 @@ int main(int argc, char **argv)
 	  struct batch *b = batches;
 	  batches = b->next_batch;
 	  for (int i = 0 ; i < OBJECTS_PER_BATCH; i++) {
-	    xfree(b->objects[i]);
+	    bench_free_sized(b->objects[i], b->sizes[i]);
 	  }
-	  xfree(b);
+	  bench_free_sized(b, sizeof(*b));
 	}
   
-  xfree(thread_ids);
-  xfree(counters);
+  bench_free_sized(thread_ids, sizeof(pthread_t) * num_workers * 2);
+  bench_free_sized(counters, sizeof(*counters) * num_workers);
+  bench_thread_done();
 
 	return 0;
 }
